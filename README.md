@@ -1126,3 +1126,366 @@ export default function LoginForm() {
   );
 }
 ```
+
+## 54-7 Implement NextAuth Credentials login system, 54-8 Add user id to token with NextAuth callbacks
+- Its ok to use login using raw method but we will use next Auth for this.
+- Next auth template for credentials login 
+
+```ts
+import CredentialsProvider from "next-auth/providers/credentials";
+...
+providers: [
+  CredentialsProvider({
+    // The name to display on the sign in form (e.g. "Sign in with...")
+    name: "Credentials",
+    // `credentials` is used to generate a form on the sign in page.
+    // You can specify which fields should be submitted, by adding keys to the `credentials` object.
+    // e.g. domain, username, password, 2FA token, etc.
+    // You can pass any HTML attribute to the <input> tag through the object.
+    credentials: {
+      username: { label: "Username", type: "text", placeholder: "jsmith" },
+      password: { label: "Password", type: "password" }
+    },
+    async authorize(credentials, req) {
+      // Add logic here to look up the user from the credentials supplied
+      const user = { id: "1", name: "J Smith", email: "jsmith@example.com" }
+
+      if (user) {
+        // Any object returned will be saved in `user` property of the JWT
+        return user
+      } else {
+        // If you return null then an error will be displayed advising the user to check their details.
+        return null
+
+        // You can also Reject this callback with an Error thus the user will be sent to the error page with the error message as a query parameter
+      }
+    }
+  })
+]
+...
+```
+- Now lets modify it 
+- src -> helpers -> authOptions.ts 
+
+```ts
+import GoogleProvider from "next-auth/providers/google";
+import CredentialsProvider from "next-auth/providers/credentials";
+
+export const authOptions = {
+    // Configure one or more authentication providers
+    providers: [
+        GoogleProvider({
+            clientId: process.env.GOOGLE_CLIENT_ID as string,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET as string
+        }),
+
+        CredentialsProvider({
+            name: "Credentials",
+
+            credentials: {
+                email: { label: "Email", type: "text" },
+                password: { label: "Password", type: "password" },
+            },
+            async authorize(credentials) {
+                if (!credentials?.email || !credentials.password) {
+                    console.error("Email or Password is missing");
+                    return null;
+                }
+
+                try {
+                    const res = await fetch(
+                        `${process.env.NEXT_PUBLIC_BASE_API}/auth/login`,
+                        {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({
+                                email: credentials.email,
+                                password: credentials.password,
+                            }),
+                        }
+                    );
+                    console.log("Response From Backend:", res);
+                    if (!res?.ok) {
+                        console.error("Login Failed", await res.text());
+                        return null;
+                    }
+
+                    const user = await res.json();
+                    if (user.id) {
+                        return {
+                            id: user?.id,
+                            name: user?.name,
+                            email: user?.email,
+                            image: user?.picture,
+                        };
+                    } else {
+                        return null;
+                    }
+                } catch (err) {
+                    console.error(err);
+                    return null;
+                }
+            },
+        }),
+    ],
+    secret: process.env.AUTH_SECRET,
+    pages: {
+        signIn: "/login"
+    }
+}
+```
+- Now lets connect the login form with the authOptions for credential login using next auth. 
+
+```tsx 
+"use client";
+
+import React from "react";
+import { useForm } from "react-hook-form";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import Link from "next/link";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import Image from "next/image";
+import { signIn } from "next-auth/react";
+// import { login } from "@/actions/auth";
+// import { toast } from "sonner";
+
+type LoginFormValues = {
+  email: string;
+  password: string;
+};
+
+export default function LoginForm() {
+  const form = useForm<LoginFormValues>({
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+  });
+
+  const onSubmit = async (values: LoginFormValues) => {
+    console.log("Login submitted:", values);
+    try {
+      // const res = await login(values)
+      // if (res?.id) {
+      //   toast.success("User Logged In Successfully!")
+      // } else{
+      //   toast.error("Login Failed!")
+      // }
+      signIn("credentials", {
+        ...values,
+        callbackUrl: "/dashboard"
+      })
+    } catch (error) {
+      console.log(error)
+    }
+  };
+
+  const handleSocialLogin = async (provider: "google" | "github") => {
+    console.log(`Login with ${provider}`);
+  };
+
+  return (
+    <div className="flex justify-center items-center min-h-screen bg-gray-50">
+      <div className="space-y-6 w-full max-w-md bg-white p-8 rounded-lg shadow-md">
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="space-y-6 w-full max-w-md"
+          >
+            <h2 className="text-3xl font-bold text-center">Login</h2>
+
+            {/* Email */}
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="email"
+                      placeholder="Enter your email"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Password */}
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Password</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="password"
+                      placeholder="Enter your password"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <Button type="submit" className="w-full mt-2">
+              Login
+            </Button>
+
+            <div className="flex items-center justify-center space-x-2">
+              <div className="h-px w-16 bg-gray-300" />
+              <span className="text-sm text-gray-500">or continue with</span>
+              <div className="h-px w-16 bg-gray-300" />
+            </div>
+          </form>
+        </Form>
+        {/* Social Login Buttons */}
+        <div className="flex flex-col gap-3 mt-4">
+          <Button
+            variant="outline"
+            className="flex items-center justify-center gap-2"
+            onClick={() => handleSocialLogin("github")}
+          >
+            {/* GitHub */}
+            <Image
+              src="https://img.icons8.com/ios-glyphs/24/github.png"
+              alt="GitHub"
+              className="w-5 h-5"
+              width={20}
+              height={20}
+            />
+            Login with GitHub
+          </Button>
+
+          <Button
+            variant="outline"
+            className="flex items-center justify-center gap-2"
+            // onClick={() => handleSocialLogin("google")}
+            onClick={() => signIn("google", {
+              callbackUrl: "/dashboard"
+            })}
+          >
+            {/* Google */}
+            <Image
+              src="https://img.icons8.com/color/24/google-logo.png"
+              alt="Google"
+              className="w-5 h-5"
+              width={20}
+              height={20}
+            />
+            Login with Google
+          </Button>
+        </div>
+        <p className="text-center text-sm text-gray-500 mt-4">
+          Don’t have an account?{" "}
+          <Link href="/register" className="text-blue-500 hover:underline">
+            Register
+          </Link>
+        </p>
+      </div>
+    </div>
+  );
+}
+```
+- here a problem arose because in token th `id` is not coming. We need to set the user id as the token id and further we will use the id for our works. 
+- when we want to do modification in token, session or signin functions we can use `callbacks` in authOptions
+
+```ts
+import GoogleProvider from "next-auth/providers/google";
+import CredentialsProvider from "next-auth/providers/credentials";
+
+export const authOptions = {
+    // Configure one or more authentication providers
+    providers: [
+        GoogleProvider({
+            clientId: process.env.GOOGLE_CLIENT_ID as string,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET as string
+        }),
+
+        CredentialsProvider({
+            name: "Credentials",
+
+            credentials: {
+                email: { label: "Email", type: "text" },
+                password: { label: "Password", type: "password" },
+            },
+            async authorize(credentials) {
+                if (!credentials?.email || !credentials.password) {
+                    console.error("Email or Password is missing");
+                    return null;
+                }
+
+                try {
+                    const res = await fetch(
+                        `${process.env.NEXT_PUBLIC_BASE_API}/auth/login`,
+                        {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({
+                                email: credentials.email,
+                                password: credentials.password,
+                            }),
+                        }
+                    );
+                    console.log("Response From Backend:", res);
+                    if (!res?.ok) {
+                        console.error("Login Failed", await res.text());
+                        return null;
+                    }
+
+                    const user = await res.json();
+                    if (user.id) {
+                        return {
+                            id: user?.id,
+                            name: user?.name,
+                            email: user?.email,
+                            image: user?.picture,
+                        };
+                    } else {
+                        return null;
+                    }
+                } catch (err) {
+                    console.error(err);
+                    return null;
+                }
+            },
+        }),
+    ],
+    callbacks: {
+        async jwt({ token, user }) {
+            if (user) {
+                token.id = user?.id
+            }
+            return token
+        },
+        async session({ session, token }) {
+            if (session?.user) {
+                session.user.id = token?.id
+            }
+            return session
+        }
+    },
+    secret: process.env.AUTH_SECRET,
+    pages: {
+        signIn: "/login"
+    }
+}
+
+
+```
