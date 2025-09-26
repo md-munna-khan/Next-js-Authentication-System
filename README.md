@@ -101,8 +101,13 @@ https://console.developers.google.com/apis/credentials
 The "Authorized redirect URIs" used when creating the credentials must include your full domain and end in the callback path. For example;
 
 For production: https://{YOUR_DOMAIN}/api/auth/callback/google
-- ✅ add this callback url for development
+- ✅ add this callback url 
 For development: http://localhost:3000/api/auth/callback/google
+
+- add client api and secret key 
+
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
 
 - /components/Auth/loginForm.tsx
 - handle google button 
@@ -227,7 +232,7 @@ export default function LoginForm() {
           <Button
             variant="outline"
             className="flex items-center justify-center gap-2"
-            onClick={() => signIn("google",{
+           ✅ onClick={() => signIn("google",{
               callbackUrl:"/dashboard"
             })}
           >
@@ -249,6 +254,263 @@ export default function LoginForm() {
           </Link>
         </p>
       </div>
+    </div>
+  );
+}
+```
+
+## 54-3 Access session user & logout safely
+
+- Next auth has set the user information as token. For getting the user information next auth gives us a function
+- Update in Env
+
+```
+NEXT_PUBLIC_BASE_API=
+#  as we are not using in component level so we do not need to write NEXT_PUBLIC at initial
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+AUTH_SECRET=
+```
+
+- Add Secret to Auth Options
+
+```tsx
+import GoogleProvider from "next-auth/providers/google";
+
+export const authOptions = {
+  // Configure one or more authentication providers
+  providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID as string,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+    }),
+  ],
+  secret: process.env.AUTH_SECRET,
+};
+```
+
+- now grab the user Info
+
+```tsx
+import { authOptions } from "@/helpers/authOptions";
+import { getServerSession } from "next-auth";
+
+export default async function DashboardHome() {
+  const quote = "The secret of getting ahead is getting started. – Mark Twain";
+
+  const session = await getServerSession(authOptions);
+
+  console.log(session);
+
+  return (
+    <div className="min-h-screen flex flex-col justify-center items-center bg-gray-50 p-6 w-full">
+      <h1 className="text-4xl font-bold text-gray-800 mb-4">
+        Welcome, {session?.user?.name}!
+      </h1>
+      <h1 className="text-4xl font-bold text-gray-800 mb-4">
+        {session?.user?.email}
+      </h1>
+      <p className="text-lg text-gray-600 italic text-center">{quote}</p>
+    </div>
+  );
+}
+```
+
+#### Lets Do the Signout
+
+- For signout next auth has also gave us a function
+
+```tsx
+"use client";
+
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Home, PlusCircle, LogOut } from "lucide-react";
+import { signOut } from "next-auth/react";
+
+export default function Sidebar() {
+  return (
+    <aside className="flex h-screen w-64 flex-col border-r bg-black text-white">
+      {/* Top navigation */}
+      <nav className="flex-1 space-y-2 p-4">
+        <Link
+          href="/"
+          className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium hover:bg-gray-100 hover:text-black"
+        >
+          <Home className="h-4 w-4" />
+          Home
+        </Link>
+
+        <Link
+          href="/dashboard/create-blog"
+          className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium hover:bg-gray-100 hover:text-black"
+        >
+          <PlusCircle className="h-4 w-4" />
+          Create Blog
+        </Link>
+      </nav>
+
+      {/* Bottom action */}
+      <div className="p-4 border-t border-gray-500">
+        <Button
+          variant="destructive"
+          className="w-full justify-start gap-2 cursor-pointer"
+          onClick={() => {
+            signOut();
+          }}
+        >
+          <LogOut className="h-4 w-4" />
+          Logout
+        </Button>
+      </div>
+    </aside>
+  );
+}
+```
+
+- just `signOut()` call it and done logout
+
+#### Now lets see how we can get the session in client component?
+
+- For getting the session in client component we will create a provider and wrap the entire application
+- src -> providers -> AuthProviders
+
+```tsx
+"use client";
+import { SessionProvider } from "next-auth/react";
+import React from "react";
+
+const AuthProviders = ({ children }: { children: React.ReactNode }) => {
+  return <SessionProvider>{children}</SessionProvider>;
+};
+
+export default AuthProviders;
+```
+
+- app -> layout.tsx
+
+```tsx
+import AuthProviders from "@/providers/AuthProviders";
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  title: "Next Blog",
+  description: "A simple blog built with Next.js, Tailwind CSS, and shadcn/ui.",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en">
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
+        <AuthProviders>{children}</AuthProviders>
+      </body>
+    </html>
+  );
+}
+```
+
+- here auth provider is a client component. we are wrapping all pages with a client component that does not mean all are becoming client component. Relax !
+
+- now lets get the user info in a client component
+
+```tsx
+"use client";
+
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Home, PlusCircle, LogOut } from "lucide-react";
+import { signOut, useSession } from "next-auth/react";
+
+export default function Sidebar() {
+  const session = useSession();
+
+  return (
+    <aside className="flex h-screen w-64 flex-col border-r bg-black text-white">
+      {/* Top navigation */}
+      <nav className="flex-1 space-y-2 p-4">
+        <Link
+          href="/"
+          className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium hover:bg-gray-100 hover:text-black"
+        >
+          <Home className="h-4 w-4" />
+          Home
+        </Link>
+
+        <Link
+          href="/dashboard/create-blog"
+          className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium hover:bg-gray-100 hover:text-black"
+        >
+          <PlusCircle className="h-4 w-4" />
+          Create Blog
+        </Link>
+      </nav>
+
+      {/* Bottom action */}
+      <div className="p-4 border-t border-gray-500">
+        {session.status === "authenticated" && (
+          <Button
+            variant="destructive"
+            className="w-full justify-start gap-2 cursor-pointer"
+            onClick={() => signOut()}
+          >
+            <LogOut className="h-4 w-4" />
+            Logout
+          </Button>
+        )}
+      </div>
+    </aside>
+  );
+}
+```
+
+#### For server component lets separate the function
+
+- helpers -> getUserSession.ts
+
+```ts
+import { getServerSession } from "next-auth";
+import { authOptions } from "./authOptions";
+
+export const getUserSession = async () => await getServerSession(authOptions);
+```
+
+- dashboard -> page.tsx
+
+```tsx
+import { getUserSession } from "@/helpers/getUserSession";
+
+export default async function DashboardHome() {
+  const quote = "The secret of getting ahead is getting started. – Mark Twain";
+
+  const session = await getUserSession();
+
+  return (
+    <div className="min-h-screen flex flex-col justify-center items-center bg-gray-50 p-6 w-full">
+      <h1 className="text-4xl font-bold text-gray-800 mb-4">
+        Welcome, {session?.user?.name ?? "Guest"}!
+      </h1>
+      <h1 className="text-4xl font-bold text-gray-800 mb-4">
+        {session?.user?.email ?? ""}
+      </h1>
+      <p className="text-lg text-gray-600 italic text-center">{quote}</p>
     </div>
   );
 }
