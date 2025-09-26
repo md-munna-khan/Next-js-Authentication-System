@@ -589,3 +589,343 @@ export const authOptions = {
   },
 };
 ```
+## 54-5 Register users using Next.js server actions and a custom server
+
+- registerForm.tsx
+
+```tsx
+"use client";
+
+import React from "react";
+import { useForm } from "react-hook-form";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import Link from "next/link";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+
+type RegisterFormValues = {
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+};
+
+export default function RegisterForm() {
+  const form = useForm<RegisterFormValues>({
+    defaultValues: {
+      name: "",
+      email: "",
+      phone: "",
+      password: "",
+    },
+  });
+
+  const onSubmit = (values: RegisterFormValues) => {
+    console.log("Form submitted:", values);
+  };
+
+  return (
+    <div className="flex justify-center items-center min-h-screen bg-gray-50">
+      <Form {...form}>
+        <form
+          onSubmit={form.handleSubmit(onSubmit)}
+          className="space-y-6 w-full max-w-md bg-white p-8 rounded-lg shadow-md"
+        >
+          <h2 className="text-3xl font-bold text-center">Register Now</h2>
+          {/* Name */}
+          <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Name</FormLabel>
+                <FormControl>
+                  <Input placeholder="Enter your name" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          {/* Email */}
+          <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Email</FormLabel>
+                <FormControl>
+                  <Input
+                    type="email"
+                    placeholder="Enter your email"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          {/* Phone */}
+          <FormField
+            control={form.control}
+            name="phone"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Phone</FormLabel>
+                <FormControl>
+                  <Input placeholder="Enter your phone number" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          {/* Password */}
+          <FormField
+            control={form.control}
+            name="password"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Password</FormLabel>
+                <FormControl>
+                  <Input
+                    type="password"
+                    placeholder="Enter your password"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <Button type="submit" className="w-full mt-2">
+            Register
+          </Button>
+
+          <p className="text-center text-sm text-gray-500 mt-4">
+            Already have an account?{" "}
+            <Link href="/login" className="text-blue-500 hover:underline">
+              Login
+            </Link>
+          </p>
+        </form>
+      </Form>
+    </div>
+  );
+}
+```
+
+- src -> actions -> auth.ts
+
+```ts
+"use server";
+
+import { FieldValues } from "react-hook-form";
+
+export const register = async (data: FieldValues) => {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_API}/user`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!res?.ok) {
+    console.log("User Registration Failed!", await res.text());
+  }
+
+  return await res.json();
+};
+```
+- wrap with sonner toast in main layout 
+
+```tsx 
+import AuthProviders from "@/providers/AuthProviders";
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css"
+import { Toaster } from "sonner";
+
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  title: "Next Blog",
+  description: "A simple blog built with Next.js, Tailwind CSS, and shadcn/ui.",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en">
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
+        <AuthProviders>\
+          {/* using toster sonner */}
+          <Toaster richColors position="top-center" />
+          {children}
+        </AuthProviders>
+      </body>
+    </html>
+  );
+}
+
+```
+- using the auth function and route redirect works done in RegisterForm.tsx
+```tsx 
+"use client";
+
+import React from "react";
+import { useForm } from "react-hook-form";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import Link from "next/link";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { register } from "@/actions/auth";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+
+type RegisterFormValues = {
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+};
+
+export default function RegisterForm() {
+  const form = useForm<RegisterFormValues>({
+    defaultValues: {
+      name: "",
+      email: "",
+      phone: "",
+      password: "",
+    },
+  });
+  const router = useRouter()
+  const onSubmit = async (values: RegisterFormValues) => {
+    try {
+      const res = await register(values)
+      if(res?.id){
+        toast.success("User Registered Successfully!")
+        router.push("/login")
+      }
+    } catch (error) {
+      console.log(error)
+    }
+  };
+
+  return (
+    <div className="flex justify-center items-center min-h-screen bg-gray-50">
+      <Form {...form}>
+        <form
+          onSubmit={form.handleSubmit(onSubmit)}
+          className="space-y-6 w-full max-w-md bg-white p-8 rounded-lg shadow-md"
+        >
+          <h2 className="text-3xl font-bold text-center">Register Now</h2>
+          {/* Name */}
+          <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Name</FormLabel>
+                <FormControl>
+                  <Input placeholder="Enter your name" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          {/* Email */}
+          <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Email</FormLabel>
+                <FormControl>
+                  <Input
+                    type="email"
+                    placeholder="Enter your email"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          {/* Phone */}
+          <FormField
+            control={form.control}
+            name="phone"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Phone</FormLabel>
+                <FormControl>
+                  <Input placeholder="Enter your phone number" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          {/* Password */}
+          <FormField
+            control={form.control}
+            name="password"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Password</FormLabel>
+                <FormControl>
+                  <Input
+                    type="password"
+                    placeholder="Enter your password"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <Button type="submit" className="w-full mt-2">
+            Register
+          </Button>
+
+          <p className="text-center text-sm text-gray-500 mt-4">
+            Already have an account?{" "}
+            <Link href="/login" className="text-blue-500 hover:underline">
+              Login
+            </Link>
+          </p>
+        </form>
+      </Form>
+    </div>
+  );
+}
+```
