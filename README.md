@@ -515,3 +515,77 @@ export default async function DashboardHome() {
   );
 }
 ```
+
+## 54-4 Protect a route from unauthorized users using middleware
+
+- The middleware.js|ts file is used to write Middleware and run code on the server before a request is completed. Then, based on the incoming request, you can modify the response by `rewriting`, `redirecting`, `modifying` the request or `response headers`, or `responding directly`.
+
+- Middleware executes before routes are rendered. It's particularly useful for implementing custom server-side logic like authentication, logging, or handling redirects.
+
+- Create a middleware.ts (or .js) file in the project root, or inside src if applicable, so that it is located at the same level as pages or app.
+- src -> middleware.ts
+
+```ts
+export const middleware = async () => {
+  console.log("Hello From Middleware!");
+};
+```
+
+- For each and every route this will be triggered and consoled.
+- But if we want to trigger for specific routes
+
+```ts
+export const middleware = async () => {
+  console.log("Hello From Middleware!");
+};
+
+export const config = {
+  matcher: ["/about"],
+};
+```
+
+- will be triggered in about page only
+
+```ts
+import { NextResponse, NextRequest } from "next/server";
+
+// This function can be marked `async` if using `await` inside
+export function middleware(request: NextRequest) {
+  return NextResponse.redirect(new URL("/", request.url));
+}
+
+export const config = {
+  matcher: "/about",
+};
+```
+
+- next auth made us own middleware [Next-auth-middleware](https://next-auth.js.org/configuration/nextjs#middleware)
+- middleware.ts
+
+```ts
+export { default } from "next-auth/middleware";
+
+export const config = { matcher: ["/dashboard"] };
+```
+
+- here dashboard route has become private and behind the scene the token works are done by next auth.
+- for redirecting the to the login page we have to mention THE PAGE `/login`
+- helpers -> authOptions.ts
+
+```ts
+import GoogleProvider from "next-auth/providers/google";
+
+export const authOptions = {
+  // Configure one or more authentication providers
+  providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID as string,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+    }),
+  ],
+  secret: process.env.AUTH_SECRET,
+  pages: {
+    signIn: "/login",
+  },
+};
+```
