@@ -5,7 +5,7 @@ import { getUserSession } from "@/helpers/getUserSession";
 const  DashboardHomePage  = async () => {
 
   const session= await getUserSession()
-  console.log(session,"from dashboard")
+
   return (
     <div className="w-full min-h-screen flex flex-col justify-center items-center">
       <h1 className="text-4xl">{session?.user?.name}</h1>

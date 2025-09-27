@@ -1489,3 +1489,156 @@ export const authOptions = {
 
 
 ```
+
+## 54-9 Finally, create a blog post using logged-In user id
+
+- solve typescript error
+```ts
+
+import GoogleProvider from "next-auth/providers/google";
+import CredentialsProvider from "next-auth/providers/credentials";
+import { NextAuthOptions } from "next-auth";
+
+
+declare module "next-auth"{
+  interface Session{
+    user:{
+  id:string;
+  name?:string|null;
+  email?:string|null;
+  image?:string|null;
+    }
+  }
+interface User{
+  id:string;
+  name?:string| null;
+  email?:string|null
+  image?:string|null
+}
+}
+
+export const authOptions:NextAuthOptions = {
+
+  providers: [
+  GoogleProvider({
+    clientId: process.env.GOOGLE_CLIENT_ID as string,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET as string
+  }),
+  CredentialsProvider({
+    // The name to display on the sign in form (e.g. "Sign in with...")
+    name: "Credentials",
+    // `credentials` is used to generate a form on the sign in page.
+    // You can specify which fields should be submitted, by adding keys to the `credentials` object.
+    // e.g. domain, username, password, 2FA token, etc.
+    // You can pass any HTML attribute to the <input> tag through the object.
+    credentials: {
+      email: { label: "Email", type: "text" },
+      password: { label: "Password", type: "password" }
+    },
+    async authorize(credentials) {
+
+      if(!credentials?.email|| !credentials.password ){
+        console.error("Email or password is missing")
+        return  null
+      }
+
+      try {
+           const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_API}/auth/login`,{
+        method:"POST",
+        headers:{
+            "Content-Type":"application/json",
+        },
+        body:JSON.stringify({
+          email:credentials.email,
+          password:credentials.password
+        })
+    });
+    console.log("response from backend",res)
+    if(!res?.ok){
+        console.error("user login failed",await res.text())
+        return null
+    }
+    const user = await res.json()
+        if (user?.id) {
+        // Any object returned will be saved in `user` property of the JWT
+        return {
+          id:user?.id,
+           name:user?.name,
+          email:user?.email,
+          image:user?.picture
+         
+        }
+      } else {
+        // If you return null then an error will be displayed advising the user to check their details.
+        return null
+
+        // You can also Reject this callback with an Error thus the user will be sent to the error page with the error message as a query parameter
+      }
+      } catch (error) {
+         console.error("Email or password is missing",error)
+         return null
+      }
+  
+  
+    }
+  })
+  ],
+  callbacks:{
+    async jwt({token,user}){
+      if(user){
+        token.id=user?.id
+      }
+      return token
+    },
+    async session({session,token}){
+      if(session?.user){
+        session.user.id=token?.id as string
+      }
+      return session
+    }
+  },
+  secret:process.env.AUTH_SECRET,
+  pages:{
+    signIn:"/login"
+  }
+}
+```
+- get user id dynamically
+
+```ts
+"use server"
+
+import { getUserSession } from "@/helpers/getUserSession";
+import { revalidateTag } from "next/cache";
+import { redirect } from "next/navigation";
+
+export const create = async (data:FormData)=>{
+ ✅ const session = await getUserSession()
+    const blogInfo = Object.fromEntries(data.entries());
+    const modifiedData = {
+        ...blogInfo,
+        authorId:session?.user?.id,
+        tags:blogInfo.tags
+        .toString()
+        .split(",")
+        .map((tag)=> tag.trim()),
+        isFeatured:Boolean(blogInfo.isFeatured)
+    };
+  
+  const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_API}/post`,{
+   method:"POST",
+   headers:{
+    "Content-Type":"application/json"
+   },
+   body:JSON.stringify(modifiedData)
+  });
+  const result = await res.json();
+console.log(result)
+  if(result?.id){
+    revalidateTag("BLOGS")
+    redirect("/");
+ 
+  }
+  return result
+}
+```
